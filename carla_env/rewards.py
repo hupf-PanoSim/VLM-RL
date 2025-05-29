@@ -1,3 +1,10 @@
+# carla_env/rewards.py
+# =====================
+# 奖励函数模块
+# - reward_functions: 奖励函数字典，支持多种奖励策略
+# - 每个奖励函数输入环境状态，输出奖励值
+# - 支持VLM奖励、传统驾驶奖励等
+
 import math
 
 import numpy as np

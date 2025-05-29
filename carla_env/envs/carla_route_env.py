@@ -1,3 +1,22 @@
+# carla_env/envs/carla_route_env.py
+# =====================
+# CarlaRouteEnv: CARLA仿真环境的自定义封装
+# - 实现reset、step、render等标准接口
+# - 支持多模态观测、灵活奖励、动作空间切换
+# - 可通过wrapper扩展功能
+# 输入：动作、配置参数
+# 输出：观测、奖励、done、info
+#
+# 主要功能：
+#   - 启动/连接CARLA仿真进程，初始化环境
+#   - 支持多种观测空间（动力学、路径点、图像、BEV等）
+#   - 支持连续/离散动作空间
+#   - 支持多种奖励函数与自定义回调
+#   - 支持交通流、分割BEV等高级功能
+#   - 兼容Stable-Baselines3训练与评估流程
+#
+# 详细注释见各类、方法、关键流程
+
 import os
 import subprocess
 import time
@@ -119,8 +138,10 @@ class CarlaRouteEnv(gym.Env):
 
         self.carla_process = None
         if start_carla:
-            CARLA_ROOT = "/home/sky-lab/CARLA_0.9.13"
-            carla_path = os.path.join(CARLA_ROOT, "CarlaUE4.sh")
+            # CARLA_ROOT = "/home/sky-lab/CARLA_0.9.13"
+            # carla_path = os.path.join(CARLA_ROOT, "CarlaUE4.sh")
+            CARLA_ROOT = "D:/StudyAI/vlm/carla_0.9.13/WindowsNoEditor"
+            carla_path = os.path.join(CARLA_ROOT, "CarlaUE4.exe")
             launch_command = [carla_path]
             launch_command += ['-quality_level=Low']
             launch_command += ['-benchmark']
@@ -800,9 +821,10 @@ class CarlaRouteEnv(gym.Env):
 
     def _get_mask_from_actor_list(self, actor_list, M_warp):
         mask = np.zeros([self._width, self._width], dtype=np.uint8)
-        # for actor_transform, bb_loc, bb_ext in actor_list:
+        # 遍历每个actor，获取其包围盒信息
         for data in actor_list:
             if len(data) == 12:
+                # 兼容不同格式的actor数据
                 loc_x, loc_y, loc_z, pitch, yaw, roll, bb_loc_x, bb_loc_y, bb_loc_z, bb_ext_x, bb_ext_y, bb_ext_z = data
                 actor_transform = carla.Transform(
                     carla.Location(x=loc_x, y=loc_y, z=loc_z),
@@ -812,17 +834,19 @@ class CarlaRouteEnv(gym.Env):
                 bb_ext = carla.Vector3D(x=bb_ext_x, y=bb_ext_y, z=bb_ext_z)
             else:
                 actor_transform, bb_loc, bb_ext = data
+            # 计算包围盒5个角点
             corners = [carla.Location(x=-bb_ext.x, y=-bb_ext.y),
                        carla.Location(x=bb_ext.x, y=-bb_ext.y),
                        carla.Location(x=bb_ext.x, y=0),
                        carla.Location(x=bb_ext.x, y=bb_ext.y),
                        carla.Location(x=-bb_ext.x, y=bb_ext.y)]
             corners = [bb_loc + corner for corner in corners]
-
+            # 坐标变换到世界坐标
             corners = [actor_transform.transform(corner) for corner in corners]
+            # 坐标投影到像素坐标
             corners_in_pixel = np.array([[self._world_to_pixel(corner)] for corner in corners])
             corners_warped = cv2.transform(corners_in_pixel, M_warp)
-
+            # 填充多边形mask
             cv2.fillConvexPoly(mask, np.round(corners_warped).astype(np.int32), 1)
         return mask.astype(bool)
 

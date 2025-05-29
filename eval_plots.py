@@ -1,3 +1,10 @@
+# eval_plots.py
+# =====================
+# 评估结果可视化脚本
+# - 读取评估csv，生成曲线、图片等可视化结果
+# 输入：评估csv、配置
+# 输出：图片、曲线等
+
 import os
 
 import pandas as pd

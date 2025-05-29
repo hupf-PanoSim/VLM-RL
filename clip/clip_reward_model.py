@@ -1,3 +1,11 @@
+# clip/clip_reward_model.py
+# =====================
+# CLIP/VLM奖励模型模块
+# - 加载CLIP模型，计算图像与文本的相似度作为奖励
+# - 支持多种VLM奖励策略
+# 输入：图像特征、文本prompt
+# 输出：奖励分数
+
 from typing import List, Tuple
 
 import open_clip

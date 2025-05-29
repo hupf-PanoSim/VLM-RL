@@ -1,3 +1,15 @@
+# utils.py
+# =====================
+# 工具函数模块
+# - HParamCallback: 超参数记录回调
+# - TensorboardCallback: Tensorboard日志回调
+# - write_json: 保存配置为json
+# - parse_wrapper_class: 解析wrapper字符串
+# - VideoRecorder/VideoRecorderCallback: 训练过程视频录制
+# - lr_schedule: 学习率调度函数
+# - HistoryWrapperObsDict/FrameSkip: 环境包装器
+#
+
 import cv2
 import math
 import json
@@ -8,7 +20,10 @@ import pygame
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import HParam
 
-
+# =====================
+# 配置保存为json文件
+# - 支持嵌套字典、类型转换
+# =====================
 def write_json(data, path):
     config_dict = {}
     with open(path, 'w', encoding='utf-8') as f:
@@ -24,7 +39,10 @@ def write_json(data, path):
                 config_dict[k] = v.__str__()
         json.dump(config_dict, f, indent=4)
 
-
+# =====================
+# 视频录制工具类
+# - 用于保存训练过程视频，支持奖励叠加显示
+# =====================
 class VideoRecorder():
     def __init__(self, filename, frame_size, fps=30):
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
@@ -35,9 +53,7 @@ class VideoRecorder():
 
     def add_frame_with_reward(self, frame, reward):
         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-
         reward_text = f"Reward: {reward:.2f}"
-
         (text_width, text_height), _ = cv2.getTextSize(
             reward_text, cv2.FONT_HERSHEY_SIMPLEX, 1, 2
         )
@@ -55,7 +71,10 @@ class VideoRecorder():
     def __del__(self):
         self.release()
 
-
+# =====================
+# 超参数记录回调
+# - 训练开始时将超参数写入Tensorboard的hparams面板
+# =====================
 class HParamCallback(BaseCallback):
     def __init__(self, config):
         """
@@ -91,12 +110,14 @@ class HParamCallback(BaseCallback):
     def _on_step(self) -> bool:
         return True
 
-
+# =====================
+# Tensorboard自定义日志回调
+# - 记录自定义指标到Tensorboard，便于训练过程监控
+# =====================
 class TensorboardCallback(BaseCallback):
     """
     Custom callback for plotting additional values in tensorboard.
     """
-
     def __init__(self, verbose=0):
         super().__init__(verbose)
 
@@ -120,20 +141,20 @@ class TensorboardCallback(BaseCallback):
                 self.logger.record("custom/CPM", self.locals['infos'][0]['CPM'])
                 self.logger.record("custom/collision_interval", self.locals['infos'][0]['collision_interval'])
                 self.logger.record("custom/collision_speed", self.locals['infos'][0]['collision_speed'])
-
             self.logger.dump(self.num_timesteps)
-
+            # 记录最近500步奖励统计
             if hasattr(self.model, 'replay_buffer'):
                 recent_rewards = self.model.replay_buffer.rewards[max(0, self.model.replay_buffer.pos-500):self.model.replay_buffer.pos]
                 mean_recent_rewards = np.mean(recent_rewards)
                 sum_recent_rewards = np.sum(recent_rewards)
-
-                # Log the results
                 self.logger.record("replay_buffer/mean_recent_rewards", mean_recent_rewards)
                 self.logger.record("replay_buffer/sum_recent_rewards", sum_recent_rewards)
-
         return True
 
+# =====================
+# 训练过程视频录制回调
+# - 自动采集环境画面并保存为视频
+# =====================
 class VideoRecorderCallback(BaseCallback):
     def __init__(self, video_path, frame_size, video_length=-1, fps=30, skip_frame=1, verbose=0):
         super().__init__(verbose)
@@ -151,43 +172,42 @@ class VideoRecorderCallback(BaseCallback):
             return True
         display = self.training_env.unwrapped.envs[0].env.display
         frame = np.array(pygame.surfarray.array3d(display), dtype=np.uint8).transpose([1, 0, 2])
-
         self.video_recorder.add_frame(frame)
         return True
 
     def _on_training_end(self) -> None:
         self.video_recorder.release()
 
-
+# =====================
+# 学习率调度函数
+# - 支持指数衰减，便于RL训练收敛
+# =====================
 def lr_schedule(initial_value: float, end_value: float, rate: float):
     """
     Learning rate schedule:
         Exponential decay by factors of 10 from initial_value to end_value.
-
     :param initial_value: Initial learning rate.
     :param rate: Exponential rate of decay. High values mean fast early drop in LR
     :param end_value: The final value of the learning rate.
     :return: schedule that computes current learning rate depending on remaining progress
     """
-
     def func(progress_remaining: float) -> float:
         """
         Progress will decrease from 1 (beginning) to 0.
-
         :param progress_remaining: A float value between 0 and 1 that represents the remaining progress.
         :return: The current learning rate.
         """
         if progress_remaining <= 0:
             return end_value
-
         return end_value + (initial_value - end_value) * (10 ** (rate * math.log10(progress_remaining)))
-
     func.__str__ = lambda: f"lr_schedule({initial_value}, {end_value}, {rate})"
     lr_schedule.__str__ = lambda: f"lr_schedule({initial_value}, {end_value}, {rate})"
-
     return func
 
-
+# =====================
+# 环境观测历史包装器
+# - 保留过去horizon步的观测和动作，适用于部分RL算法
+# =====================
 class HistoryWrapperObsDict(gym.Wrapper):
     # History Wrapper from rl-baselines3-zoo
     # https://github.com/DLR-RM/rl-baselines3-zoo/blob/10de3a8804b14b4ea605b487ae7d8117c52901c4/rl_zoo3/wrappers.py
@@ -196,38 +216,29 @@ class HistoryWrapperObsDict(gym.Wrapper):
     :param env:
     :param horizon: Number of steps to keep in the history.
     """
-
     def __init__(self, env: gym.Env, horizon: int = 2, obs_key: str = 'vae_latent') -> object:
         self.obs_key = obs_key
         assert isinstance(env.observation_space.spaces[obs_key], gym.spaces.Box)
         print("Wrapping the env with HistoryWrapperObsDict.")
         wrapped_obs_space = env.observation_space.spaces[self.obs_key]
         wrapped_action_space = env.action_space
-
         low_obs = np.repeat(wrapped_obs_space.low, horizon, axis=-1)
         high_obs = np.repeat(wrapped_obs_space.high, horizon, axis=-1)
-
         low_action = np.repeat(wrapped_action_space.low, horizon, axis=-1)
         high_action = np.repeat(wrapped_action_space.high, horizon, axis=-1)
-
         low = np.concatenate((low_obs, low_action))
         high = np.concatenate((high_obs, high_action))
-
         # Overwrite the observation space
         env.observation_space.spaces[obs_key] = gym.spaces.Box(low=low, high=high, dtype=wrapped_obs_space.dtype)
-
         super().__init__(env)
-
         self.horizon = horizon
         self.low_action, self.high_action = low_action, high_action
         self.low_obs, self.high_obs = low_obs, high_obs
         self.low, self.high = low, high
         self.obs_history = np.zeros(low_obs.shape, low_obs.dtype)
         self.action_history = np.zeros(low_action.shape, low_action.dtype)
-
     def _create_obs_from_history(self):
         return np.concatenate((self.obs_history, self.action_history))
-
     def reset(self):
         # Flush the history
         self.obs_history[...] = 0
@@ -235,39 +246,33 @@ class HistoryWrapperObsDict(gym.Wrapper):
         obs_dict = self.env.reset()
         obs = obs_dict[self.obs_key]
         self.obs_history[..., -obs.shape[-1]:] = obs
-
         obs_dict[self.obs_key] = self._create_obs_from_history()
-
         return obs_dict
-
     def step(self, action):
         obs_dict, reward, done, info = self.env.step(action)
         obs = obs_dict[self.obs_key]
         last_ax_size = obs.shape[-1]
-
         self.obs_history = np.roll(self.obs_history, shift=-last_ax_size, axis=-1)
         self.obs_history[..., -obs.shape[-1]:] = obs
-
         self.action_history = np.roll(self.action_history, shift=-action.shape[-1], axis=-1)
         self.action_history[..., -action.shape[-1]:] = action
-
         obs_dict[self.obs_key] = self._create_obs_from_history()
-
         return obs_dict, reward, done, info
 
-
+# =====================
+# 环境帧跳包装器
+# - 每skip步才返回一次观测，常用于加速训练
+# =====================
 class FrameSkip(gym.Wrapper):
     """
     Return only every ``skip``-th frame (frameskipping)
     :param env: the environment
     :param skip: number of ``skip``-th frame
     """
-
     def __init__(self, env: gym.Env, skip: int = 4):
         super().__init__(env)
         print("Wrapping the env with FrameSkip.")
         self._skip = skip
-
     def step(self, action: np.ndarray):
         """
         Step the environment with the given action
@@ -282,24 +287,23 @@ class FrameSkip(gym.Wrapper):
             total_reward += reward
             if done:
                 break
-
         return obs, total_reward, done, info
-
     def reset(self):
         return self.env.reset()
 
-
+# =====================
+# wrapper字符串解析工具
+# - 支持字符串转包装器类及参数
+# =====================
 def parse_wrapper_class(wrapper_class_str: str):
     """
     Parse a string to a wrapper class.
-
     :param wrapper_class_str: (str) The string to parse.
     :return: (type) The wrapper class and its parameters.
     """
     wrap_class, wrap_params = wrapper_class_str.split("_", 1)
     wrap_params = wrap_params.split("_")
     wrap_params = [int(param) if param.isnumeric() else param for param in wrap_params]
-
     if wrap_class == "HistoryWrapperObsDict":
         return HistoryWrapperObsDict, wrap_params
     elif wrap_class == "FrameSkip":

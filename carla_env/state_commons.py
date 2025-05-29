@@ -1,3 +1,11 @@
+# carla_env/state_commons.py
+# =====================
+# 状态空间与编码函数生成模块
+# - create_encode_state_fn: 根据配置动态生成观测空间和状态编码函数
+# - 支持多模态观测组合（图像、动力学、分割等）
+# 输入：状态配置、全局配置
+# 输出：gym.spaces观测空间、状态编码函数
+
 import torch
 from torchvision import transforms
 
@@ -8,7 +16,10 @@ from carla_env.wrappers import vector, get_displacement_vector
 
 torch.cuda.empty_cache()
 
-
+# =====================
+# 图像预处理函数
+# - 将输入帧转为Tensor格式，适配神经网络输入
+# =====================
 def preprocess_frame(frame):
     preprocess = transforms.Compose([
         transforms.ToTensor(),
@@ -16,13 +27,19 @@ def preprocess_frame(frame):
     frame = preprocess(frame).unsqueeze(0)
     return frame
 
-
+# =====================
+# create_encode_state_fn
+# - 根据传入的观测项和配置，动态生成观测空间和状态编码函数
+# - 支持多模态观测（车辆动力学、路径点、图像、分割、终点向量等）
+# - 返回: (观测空间, 状态编码函数)
+# =====================
 def create_encode_state_fn(measurements_to_include, CONFIG, vae=None):
     """
         Returns a function that encodes the current state of
         the environment into some feature vector.
     """
 
+    # 生成观测项标志位列表，后续用于动态构建空间和编码
     measure_flags = ["steer" in measurements_to_include,
                      "throttle" in measurements_to_include,
                      "speed" in measurements_to_include,
@@ -35,60 +52,65 @@ def create_encode_state_fn(measurements_to_include, CONFIG, vae=None):
                      "end_wp_fixed" in measurements_to_include,
                      "distance_goal" in measurements_to_include]
 
+    # ========== 动态生成观测空间 ========== 
     def create_observation_space():
         observation_space = {}
         low, high = [], []
-        if measure_flags[0]: low.append(-1), high.append(1)
-        if measure_flags[1]: low.append(0), high.append(1)
-        if measure_flags[2]: low.append(0), high.append(120)
-        if measure_flags[3]: low.append(-3.14), high.append(3.14)
+        # 车辆动力学相关观测
+        if measure_flags[0]: low.append(-1), high.append(1)  # steer
+        if measure_flags[1]: low.append(0), high.append(1)   # throttle
+        if measure_flags[2]: low.append(0), high.append(120) # speed
+        if measure_flags[3]: low.append(-3.14), high.append(3.14) # angle
         observation_space['vehicle_measures'] = gym.spaces.Box(low=np.array(low), high=np.array(high), dtype=np.float32)
-
+        # 当前驾驶意图
         if measure_flags[4]: observation_space['maneuver'] = gym.spaces.Discrete(4)
-
+        # 路径点序列
         if measure_flags[5]: observation_space['waypoints'] = gym.spaces.Box(low=-50, high=50, shape=(15, 2),
                                                                              dtype=np.float32)
-
+        # 图像观测
         if measure_flags[6]: observation_space['rgb_camera'] = gym.spaces.Box(low=0, high=255, shape=(CONFIG['obs_res'][1], CONFIG['obs_res'][0], 3), dtype=np.uint8)
         if measure_flags[7]: observation_space['seg_camera'] = gym.spaces.Box(low=0, high=255, shape=(CONFIG['obs_res'][1], CONFIG['obs_res'][0], 3), dtype=np.uint8)
+        # 终点向量
         if measure_flags[8]: observation_space['end_wp_vector'] = gym.spaces.Box(low=-50, high=50, shape=(1, 2), dtype=np.float32)
         if measure_flags[9]: observation_space['end_wp_fixed'] = gym.spaces.Box(low=-50, high=50, shape=(1, 2), dtype=np.float32)
+        # 距离目标点
         if measure_flags[10]: observation_space['distance_goal'] = gym.spaces.Box(low=0, high=1500, shape=(1, 1), dtype=np.float32)
-
+        # 分割BEV观测（如有）
         if CONFIG.use_seg_bev: observation_space['seg_camera'] = gym.spaces.Box(low=0, high=255, shape=(192, 192, 6), dtype=np.uint8)
-
         return gym.spaces.Dict(observation_space)
 
+    # ========== 状态编码函数 ========== 
     def encode_state(env):
         encoded_state = {}
         vehicle_measures = []
+        # 车辆动力学观测
         if measure_flags[0]: vehicle_measures.append(env.vehicle.control.steer)
         if measure_flags[1]: vehicle_measures.append(env.vehicle.control.throttle)
         if measure_flags[2]: vehicle_measures.append(env.vehicle.get_speed())
         if measure_flags[3]: vehicle_measures.append(env.vehicle.get_angle(env.current_waypoint))
         encoded_state['vehicle_measures'] = vehicle_measures
+        # 当前驾驶意图
         if measure_flags[4]: encoded_state['maneuver'] = env.current_road_maneuver.value
-
+        # 路径点序列（相对坐标）
         if measure_flags[5]:
             next_waypoints_state = env.route_waypoints[env.current_waypoint_index: env.current_waypoint_index + 15]
             waypoints = [vector(way[0].transform.location) for way in next_waypoints_state]
-
             vehicle_location = vector(env.vehicle.get_location())
             theta = np.deg2rad(env.vehicle.get_transform().rotation.yaw)
-
             relative_waypoints = np.zeros((15, 2))
             for i, w_location in enumerate(waypoints):
                 relative_waypoints[i] = get_displacement_vector(vehicle_location, w_location, theta)[:2]
+            # 路径点不足时用最后方向外推补齐
             if len(waypoints) < 15:
                 start_index = len(waypoints)
                 reference_vector = relative_waypoints[start_index-1] - relative_waypoints[start_index-2]
                 for i in range(start_index, 15):
                     relative_waypoints[i] = relative_waypoints[i-1] + reference_vector
-
             encoded_state['waypoints'] = relative_waypoints
-
+        # 图像观测
         if measure_flags[6]: encoded_state['rgb_camera'] = env.observation
-        if measure_flags[7] : encoded_state['seg_camera'] = env.observation
+        if measure_flags[7]: encoded_state['seg_camera'] = env.observation
+        # 终点向量（相对当前车身/起点）
         if measure_flags[8]:
             vehicle_location = vector(env.vehicle.get_location())
             theta = np.deg2rad(env.vehicle.get_transform().rotation.yaw)
@@ -99,9 +121,9 @@ def create_encode_state_fn(measurements_to_include, CONFIG, vae=None):
             theta = np.deg2rad(env.start_wp.transform.rotation.yaw)
             end_wp_location = vector(env.end_wp.transform.location)
             encoded_state['end_wp_fixed'] = get_displacement_vector(vehicle_location, end_wp_location, theta)[:2]
+        # 距离目标点
         if measure_flags[10]:
             encoded_state['distance_goal'] = [[len(env.route_waypoints) - env.current_waypoint_index]]
-
         return encoded_state
 
     return create_observation_space(), encode_state

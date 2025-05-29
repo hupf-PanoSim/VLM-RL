@@ -1,3 +1,10 @@
+# run_eval.py
+# =====================
+# 批量评估脚本
+# - 支持批量加载模型，自动化评估流程
+# 输入：模型目录、配置
+# 输出：评估结果汇总
+
 import glob
 import subprocess
 import time
@@ -9,12 +16,14 @@ from tqdm import tqdm
 def kill_carla():
     print("Killing Carla server\n")
     time.sleep(1)
-    subprocess.run(["killall", "-9", "CarlaUE4-Linux-Shipping"])
+    # subprocess.run(["killall", "-9", "CarlaUE4-Linux-Shipping"])
+    subprocess.run(["taskkill", "/F", "/IM", "CarlaUE4-Win64-Shipping.exe"])
     time.sleep(4)
 
 
 if __name__ == '__main__':
-    selected_models = [f"model_{i}_steps.zip" for i in range(100000, 1100000, 100000)]
+    # selected_models = [f"model_{i}_steps.zip" for i in range(100000, 1100000, 100000)]
+    selected_models = [f"model_{i}_steps.zip" for i in range(1, 129, 1)]
     tensorboard_path = './tensorboard'
     for model_path in tqdm(os.listdir(tensorboard_path), desc="Processing models"):
         config = model_path.split('id')[-1]
@@ -29,7 +38,8 @@ if __name__ == '__main__':
             continue
 
         for model_ckpt in model_ckpts:
-            if model_ckpt.split('/')[-1] not in selected_models: continue
+            # if model_ckpt.split('/')[-1] not in selected_models: continue
+            if model_ckpt.split('\\')[-1] not in selected_models: continue
             # summary_path = os.path.join(tensorboard_path, model_path, "eval",
             #                             os.path.basename(model_ckpt).replace(".zip", "_eval_summary.csv"))
             # if os.path.exists(summary_path):

@@ -19,10 +19,18 @@ parser.add_argument("--num_checkpoints", type=int, default=100, help="Checkpoint
 parser.add_argument("--log_dir", type=str, default="tensorboard", help="Directory to save logs")
 parser.add_argument("--device", type=str, default="cuda:0", help="cpu, cuda:0, cuda:1, cuda:2")
 parser.add_argument("--config", type=str, default="vlm_rl_ppo", help="Config to use (default: vlm_rl)")
+parser.add_argument("--start_step", type=int, default="0", help="number of start step (default: 0)")
 
-args = vars(parser.parse_args())
+args = {
+    'host': 'localhost', 'port': 2000, 'total_timesteps': 1000000, 
+    'start_carla': True, 'no_render': False, 'fps': 15,
+    'num_checkpoints': 100, 'log_dir': 'tensorboard', 'device': 'cuda:0', 'config': 'vlm_rl', 'start_step': 20000}
+
+# args = vars(parser.parse_args())
 CONFIG = config.set_config(args["config"])
 CONFIG.algorithm_params.device = args["device"]
+
+CONFIG.start_step = args["start_step"]
 
 from stable_baselines3 import PPO, DDPG, SAC
 from clip.clip_rewarded_sac import CLIPRewardedSAC
@@ -58,23 +66,56 @@ for wrapper_class_str in CONFIG.wrappers:
     wrap_class, wrap_params = parse_wrapper_class(wrapper_class_str)
     env = wrap_class(env, *wrap_params)
 
-if AlgorithmRL.__name__ == "CLIPRewardedSAC":
-    model = CLIPRewardedSAC(env=env, config=CONFIG)
-elif AlgorithmRL.__name__ == "CLIPRewardedPPO":
-    model = CLIPRewardedPPO(env=env, config=CONFIG)
+load_from_checkpoint = args["start_step"] > 0
+# checkpoint_path = '/home/panosim/hupf/VLM-RL/tensorboard/CLIPRewardedSAC_20250523_162957_idvlm_rl'
+checkpoint_path = 'D:/StudyAI/vlm/github/VLM-RL/tensorboard/CLIPRewardedSAC_20250526_170540_idvlm_rl'
+if load_from_checkpoint:
+    zip_file = f'model_{args["start_step"]}_steps.zip'
+    checkpoint = os.path.join(checkpoint_path, zip_file)
+    if os.path.exists(checkpoint):
+        model = AlgorithmRL.load(checkpoint, env=env, device=args["device"])
+        print(f"Successfully loaded checkpoint from: {checkpoint}")
+    else:
+        raise ValueError(f"No checkpoint found at: {checkpoint}")
 else:
-    model = AlgorithmRL('MultiInputPolicy', env, verbose=1, seed=CONFIG.seed, tensorboard_log=args["log_dir"],
-                        **CONFIG.algorithm_params)
+    if AlgorithmRL.__name__ == "CLIPRewardedSAC":
+        model = CLIPRewardedSAC(env=env, config=CONFIG)
+    elif AlgorithmRL.__name__ == "CLIPRewardedPPO":
+        model = CLIPRewardedPPO(env=env, config=CONFIG)
+    else:
+        model = AlgorithmRL(
+            'MultiInputPolicy', 
+            env, 
+            verbose=1, 
+            seed=CONFIG.seed, 
+            tensorboard_log=args["log_dir"],
+            **CONFIG.algorithm_params
+        )
 
-model_suffix = "{}_id{}".format(datetime.now().strftime("%Y%m%d_%H%M%S"), args['config'])
-model_name = f'{model.__class__.__name__}_{model_suffix}'
-model_dir = os.path.join(args["log_dir"], model_name)
+if load_from_checkpoint:
+    model_dir = checkpoint_path
+    print(f"Resuming training from checkpoint in: {model_dir}")
+else:
+    model_suffix = "{}_id{}".format(datetime.now().strftime("%Y%m%d_%H%M%S"), args['config'])
+    model_name = f'{model.__class__.__name__}_{model_suffix}'
+    model_dir = os.path.join(args["log_dir"], model_name)
+    print(f"Model directory: {model_dir}")
 
-new_logger = configure(model_dir, ["stdout", "csv", "tensorboard"])
-model.set_logger(new_logger)
-write_json(CONFIG, os.path.join(model_dir, 'config.json'))
+if not load_from_checkpoint:
+    new_logger = configure(model_dir, ["stdout", "csv", "tensorboard"])
+    model.set_logger(new_logger)
+    write_json(CONFIG, os.path.join(model_dir, 'config.json'))
 
-model.learn(total_timesteps=args["total_timesteps"],
-            callback=[HParamCallback(CONFIG), TensorboardCallback(1), CheckpointCallback(
+model.learn(
+    total_timesteps=args["total_timesteps"],
+    callback=[
+        HParamCallback(CONFIG), 
+        TensorboardCallback(1), 
+        CheckpointCallback(
                 save_freq=args["total_timesteps"] // args["num_checkpoints"],
-                save_path=model_dir, name_prefix="model")], reset_num_timesteps=False)
+                save_path=model_dir, 
+                name_prefix="model"
+        )
+    ], 
+    reset_num_timesteps=not load_from_checkpoint
+)

@@ -1,3 +1,9 @@
+# clip/clip_rewarded_ppo.py
+# =====================
+# CLIPRewardedPPO: 基于PPO的VLM奖励强化学习算法实现
+# - 集成CLIP奖励，支持端到端VLM-RL训练
+# 输入：环境、配置
+# 输出：训练好的模型
 import pathlib
 import sys
 import time

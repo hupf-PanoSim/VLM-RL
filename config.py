@@ -1,3 +1,12 @@
+# config.py
+# =====================
+# 配置模块，集中管理所有实验参数、状态空间、奖励函数、网络结构等
+# =====================
+# 典型结构：
+# - set_config(config_name): 根据名称返回对应配置对象
+# - CONFIGS: 字典，包含所有可用配置
+# - 每个配置包含：算法名、状态空间、奖励函数、网络参数、wrapper列表等
+
 import torch as th
 from box import Box
 from stable_baselines3.common.noise import NormalActionNoise
@@ -10,12 +19,16 @@ import torch.nn as nn
 import gymnasium as gym
 import torch
 
-
+# =====================
+# 自定义卷积神经网络特征提取器
+# 用于处理图像观测，支持不同通道数的输入
+# =====================
 class CustomCNN(nn.Module):
     def __init__(self, input_shape, features_dim=1):
         super(CustomCNN, self).__init__()
         n_input_channels = input_shape[0]
 
+        # 针对RGB图像和其他通道数分别设计卷积结构
         if n_input_channels == 3:
             self.cnn = nn.Sequential(
                 nn.Conv2d(n_input_channels, 16, kernel_size=5, stride=2),  # (16, 58, 38)
@@ -46,6 +59,7 @@ class CustomCNN(nn.Module):
                 nn.ReLU(),
                 nn.Flatten(),
             )
+        # 自动推断展平后特征维度
         with torch.no_grad():
             n_flatten = self.cnn(torch.zeros(1, *input_shape)).view(-1).shape[0]
 
@@ -56,13 +70,17 @@ class CustomCNN(nn.Module):
         x = self.linear(x)
         return x
 
-
+# =====================
+# 多输入特征提取器
+# 支持Dict类型观测空间（如图像+向量）
+# =====================
 class CustomMultiInputExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space: gym.Space, features_dim: int = 256):
         super(CustomMultiInputExtractor, self).__init__(observation_space, features_dim)
         extractors = {}
         total_concat_size = 0
 
+        # 针对每个子空间分别构建特征提取器
         if isinstance(observation_space, gym.spaces.Dict):
             for key, subspace in observation_space.spaces.items():
                 if key == "seg_camera":
@@ -88,7 +106,11 @@ class CustomMultiInputExtractor(BaseFeaturesExtractor):
             encoded_tensor_list.append(self.extractors["default"](observations))
         return torch.cat(encoded_tensor_list, dim=1)
 
-
+# =====================
+# 算法参数字典
+# - 支持PPO、SAC、DDPG、SAC_CLIP等
+# - 每项为算法的超参数配置
+# =====================
 algorithm_params = {
     "PPO": dict(
         device="cuda:0",
@@ -149,6 +171,10 @@ algorithm_params = {
     ),
 }
 
+# =====================
+# 状态空间配置
+# - 不同编号代表不同观测组合
+# =====================
 states = {
     "1": ["steer", "throttle", "speed", "angle_next_waypoint", "maneuver"],
     "2": ["steer", "throttle", "speed", "maneuver"],
@@ -157,6 +183,11 @@ states = {
     "5": ["steer", "throttle", "speed", "waypoints", "seg_camera"],
 }
 
+# =====================
+# 奖励参数配置
+# - 支持传统奖励与VLM奖励
+# - 每项为奖励函数的超参数
+# =====================
 reward_params = {
     "reward_fn_5_default": dict(
         early_stop=True,
@@ -188,6 +219,7 @@ reward_params = {
         max_angle_center_lane=90,
         penalty_reward=-10,
     ),
+    # VLM奖励相关参数
     "reward_clg": dict(
         pretrained_model="ViT-bigG-14/laion2b_s39b_b160k",
         batch_size=64,
@@ -236,6 +268,11 @@ reward_params = {
     ),
 }
 
+# =====================
+# 各实验配置字典
+# - 每个配置为一个完整实验方案
+# - 包含算法、状态、奖励、观测分辨率、seed等
+# =====================
 _CONFIG_1 = {
     "algorithm": "PPO",
     "algorithm_params": algorithm_params["PPO"],
