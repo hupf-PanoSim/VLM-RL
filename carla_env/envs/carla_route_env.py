@@ -8,7 +8,7 @@ import cv2
 from pygame.locals import *
 import random
 
-from config import CONFIG
+# from config import CONFIG
 
 from carla_env.tools.hud import HUD
 from carla_env.navigation.planner import RoadOption, compute_route_waypoints
@@ -119,8 +119,10 @@ class CarlaRouteEnv(gym.Env):
 
         self.carla_process = None
         if start_carla:
-            CARLA_ROOT = "/home/sky-lab/CARLA_0.9.13"
-            carla_path = os.path.join(CARLA_ROOT, "CarlaUE4.sh")
+            # CARLA_ROOT = "/home/sky-lab/CARLA_0.9.13"
+            # carla_path = os.path.join(CARLA_ROOT, "CarlaUE4.sh")
+            CARLA_ROOT = "D:/StudyAI/vlm/carla_0.9.13/WindowsNoEditor"
+            carla_path = os.path.join(CARLA_ROOT, "CarlaUE4.exe")
             launch_command = [carla_path]
             launch_command += ['-quality_level=Low']
             launch_command += ['-benchmark']
@@ -514,9 +516,12 @@ class CarlaRouteEnv(gym.Env):
                 self.terminal_state = True
             self.render()
 
-        max_distance = CONFIG.reward_params.max_distance
-        max_std_center_lane = CONFIG.reward_params.max_std_center_lane
-        max_angle_center_lane = CONFIG.reward_params.max_angle_center_lane
+        # max_distance = CONFIG.reward_params.max_distance
+        # max_std_center_lane = CONFIG.reward_params.max_std_center_lane
+        # max_angle_center_lane = CONFIG.reward_params.max_angle_center_lane
+        max_distance = 3.0
+        max_std_center_lane = 0.4
+        max_angle_center_lane = 90
         centering_factor = max(1.0 - self.distance_from_center / max_distance, 0.0)
 
         angle = self.vehicle.get_angle(self.current_waypoint)

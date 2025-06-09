@@ -21,7 +21,8 @@ from stable_baselines3.common.vec_env.patch_gym import _convert_space
 from clip.clip_buffer import CLIPReplayBuffer
 from clip.clip_reward_model import compute_rewards, CLIPEmbed, CLIPReward
 
-from config import CONFIG
+# from config import CONFIG
+vlm_rl_target_speed = 25.0
 
 SelfCLIPRewardedSAC = TypeVar("SelfCLIPRewardedSAC", bound="CLIPRewardedSAC")
 
@@ -127,8 +128,10 @@ class CLIPRewardedSAC(SAC):
             centering_factors = np.array(self.replay_buffer.centering_factors)
             angle_factors = np.array(self.replay_buffer.angle_factors)
             distance_std_factors = np.array(self.replay_buffer.distance_std_factors)
-            desired_speed = np.clip(rewards0.flatten(), 0.0, 1.0) * CONFIG.reward_params.target_speed
-            r_speeds = 1.0 - np.abs(speeds - desired_speed) / CONFIG.reward_params.target_speed
+            # desired_speed = np.clip(rewards0.flatten(), 0.0, 1.0) * CONFIG.reward_params.target_speed
+            # r_speeds = 1.0 - np.abs(speeds - desired_speed) / CONFIG.reward_params.target_speed
+            desired_speed = np.clip(rewards0.flatten(), 0.0, 1.0) * vlm_rl_target_speed
+            r_speeds = 1.0 - np.abs(speeds - desired_speed) / vlm_rl_target_speed
             rewards = (r_speeds * centering_factors * angle_factors * distance_std_factors).reshape(-1, 1)
             rewards = np.where(base_reward < 0, base_reward, rewards)
         elif self.config.vlm_reward_type == "LORD-Speed":
