@@ -7,6 +7,8 @@ import torch.nn as nn
 import gymnasium as gym
 import torch
 
+calc_frame_count = 2
+
 class CustomCNN(nn.Module):
     def __init__(self, input_shape, features_dim=1):
         super(CustomCNN, self).__init__()
@@ -92,8 +94,10 @@ SAC_CLIP = dict(
     ent_coef='auto',
     gamma=0.98,
     tau=0.02,
-    train_freq=64,
-    gradient_steps=64,
+    # train_freq=64,
+    train_freq=calc_frame_count,
+    # gradient_steps=64,
+    gradient_steps=calc_frame_count,
     learning_starts=10000,
     use_sde=True,
     policy_kwargs=dict(
@@ -116,7 +120,8 @@ reward_fn_5_default = dict(
 
 reward_clg = dict(
     pretrained_model="ViT-bigG-14/laion2b_s39b_b160k",
-    batch_size=64,
+    # batch_size=64,
+    batch_size=calc_frame_count,
     target_prompts=[
         "Two cars have collided with each other on the road",
         "The road is clear with no car accidents",

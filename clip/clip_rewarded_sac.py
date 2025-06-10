@@ -26,6 +26,9 @@ vlm_rl_target_speed = 25.0
 
 SelfCLIPRewardedSAC = TypeVar("SelfCLIPRewardedSAC", bound="CLIPRewardedSAC")
 
+set_local_cache_dir = True
+if set_local_cache_dir:
+    local_cache_dir = 'D:/HuggingFace/.cache/huggingface/hub'
 
 class CLIPRewardedSAC(SAC):
     replay_buffer: CLIPReplayBuffer
@@ -59,12 +62,12 @@ class CLIPRewardedSAC(SAC):
             action_noise = None
 
         super().__init__(
-            env=env,
-            policy='MultiInputPolicy',
-            replay_buffer_class=CLIPReplayBuffer,
-            tensorboard_log='tensorboard',
-            seed=config.seed,
-            action_noise=action_noise,
+            env                 =env,
+            policy              ='MultiInputPolicy',
+            replay_buffer_class =CLIPReplayBuffer,
+            tensorboard_log     ='tensorboard',
+            seed                =config.seed,
+            action_noise        =action_noise,
             **self.config.algorithm_params,
         )
         self.ep_clip_info_buffer = None  # type: Optional[deque]
@@ -80,9 +83,15 @@ class CLIPRewardedSAC(SAC):
 
     def _load_modules(self):
         model_name_prefix, pretrained = self.config.clip_reward_params.pretrained_model.split("/")
-        clip_model = open_clip.create_model(
-            model_name=model_name_prefix, pretrained=pretrained  # , cache_dir=cache_dir
-        )
+        if set_local_cache_dir:
+            clip_model = open_clip.create_model(
+                model_name=model_name_prefix, pretrained=pretrained  # , cache_dir=cache_dir
+                , cache_dir=local_cache_dir
+            )
+        else:
+            clip_model = open_clip.create_model(
+                model_name=model_name_prefix, pretrained=pretrained  # , cache_dir=cache_dir
+            )
         clip_model = CLIPEmbed(clip_model)
         target_prompts = CLIPReward.tokenize_prompts(self.config.clip_reward_params.target_prompts)
         baseline_prompts = CLIPReward.tokenize_prompts(self.config.clip_reward_params.baseline_prompts)

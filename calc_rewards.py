@@ -14,6 +14,7 @@ from clip.clip_rewarded_sac import CLIPRewardedSAC
 from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.logger import configure
 from carla_env.envs.carla_route_env import CarlaRouteEnv
+from PanoSim_env.envs.env import PanoSimEnv
 from carla_env.state_commons import create_encode_state_fn
 from utils import HParamCallback, TensorboardCallback, write_json
 import numpy as np
@@ -109,23 +110,30 @@ os.makedirs(log_dir, exist_ok=True)
 
 observation_space, encode_state_fn = create_encode_state_fn(CONFIG.state, CONFIG)
 
-env = CarlaRouteEnv(
-    obs_res=(80, 120),
-    host='localhost',
-    port=2000,
-    reward_fn=reward_fn5,
-    observation_space=observation_space,
-    encode_state_fn=encode_state_fn,
-    fps=15,
-    action_smoothing=0.75,
-    action_space_type='continuous',
-    activate_spectator=False,
-    activate_render=False,
-    activate_bev=True,
-    activate_seg_bev=True,
-    activate_traffic_flow=True,
-    start_carla=True,
-)
+use_carla = False
+if use_carla:
+    env = CarlaRouteEnv(
+        obs_res                 =(80, 120),
+        host                    ='localhost',
+        port                    =2000,
+        reward_fn               =reward_fn5,
+        observation_space       =observation_space,
+        encode_state_fn         =encode_state_fn,
+        fps                     =15,
+        action_smoothing        =0.75,
+        action_space_type       ='continuous',
+        activate_spectator      =False,
+        activate_render         =False,
+        activate_bev            =True,
+        activate_seg_bev        =True,
+        activate_traffic_flow   =True,
+        start_carla             =True
+    )
+else:
+    env = PanoSimEnv(
+        observation_space       =observation_space,
+        encode_state_fn         =encode_state_fn
+    )
 
 model = CLIPRewardedSAC(env=env, config=CONFIG)
 

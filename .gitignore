@@ -1,6 +1,8 @@
 /__pycache__
+/tensorboard
 /clip/__pycache__
 /carla_env/__pycache__
 /carla_env/envs/__pycache__
 /carla_env/navigation/__pycache__
 /carla_env/tools/__pycache__
+/PanoSim_env/envs/__pycache__
